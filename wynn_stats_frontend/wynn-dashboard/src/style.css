@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* 依然保留我们的暗黑主题基础背景 */
+@theme {
+  --default-font-family: inherit;
+}
+body {
+  background-color: #111827; /* 对应 gray-900 */
+  color: #f3f4f6;          /* 对应 gray-100 */
+}
