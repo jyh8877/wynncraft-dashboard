@@ -18,7 +18,6 @@ from .routers import (
 )
 from .config import FETCH_INTERVAL_MINUTES
 
-
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     create_db_and_tables()
