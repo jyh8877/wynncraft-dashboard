@@ -27,7 +27,7 @@ def archive_and_clean_hourly_data():
     target_hour = last_hour_time.hour
 
     start_of_hour = datetime.combine(target_date, datetime.min.time()) + timedelta(hours=target_hour)
-    end_of_hour = start_of_hour + timedelta(minutes=59, seconds=59)
+    end_of_hour = start_of_hour + timedelta(hours=1)  # exclusive upper bound
 
     print(f"[{now}] 开始执行每小时总结，目标时段: {target_date} {target_hour}:00 ~ {target_hour}:59")
 
@@ -43,7 +43,7 @@ def archive_and_clean_hourly_data():
 
         records = session.exec(
             select(PlayerHistory)
-            .where(PlayerHistory.record_time >= start_of_hour, PlayerHistory.record_time <= end_of_hour)
+            .where(PlayerHistory.record_time >= start_of_hour, PlayerHistory.record_time < end_of_hour)
             .order_by(PlayerHistory.record_time.asc())
         ).all()
 
@@ -87,11 +87,10 @@ def archive_and_clean_hourly_data():
 
         try:
             session.add(hourly_sub)
+            # 删除当前小时之前的所有旧快照（防止僵尸记录累积）
+            current_hour_start = datetime.combine(now.date(), datetime.min.time()) + timedelta(hours=now.hour)
             session.exec(
-                delete(PlayerHistory).where(
-                    PlayerHistory.record_time >= start_of_hour,
-                    PlayerHistory.record_time <= end_of_hour,
-                )
+                delete(PlayerHistory).where(PlayerHistory.record_time < current_hour_start)
             )
             session.commit()
             print(f"[{now}] 成功归档 {target_hour} 点的每小时总结，并清空原始快照。")

@@ -1,11 +1,11 @@
 """定时数据抓取与 Diff 逻辑"""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import httpx
 from sqlmodel import Session, select
 
-from ..config import TARGET_PLAYER, API_URL
+from ..config import TARGET_PLAYER, API_URL, FETCH_INTERVAL_MINUTES
 from ..constants import PLAYER_NAME
 from ..database import engine
 from ..models.player import PlayerHistory
@@ -48,23 +48,27 @@ async def fetch_and_store_player_data():
             )
 
             with Session(engine) as session:
+                # 只取最近 FETCH_INTERVAL_MINUTES*3 分钟内的快照作为比较基准，防止与过期记录对比
+                cutoff_time = datetime.now() - timedelta(minutes=FETCH_INTERVAL_MINUTES * 3)
                 last_record = session.exec(
-                    select(PlayerHistory).order_by(PlayerHistory.record_time.desc()).limit(1)
+                    select(PlayerHistory)
+                    .where(PlayerHistory.record_time >= cutoff_time)
+                    .order_by(PlayerHistory.record_time.desc())
+                    .limit(1)
                 ).first()
                 logs_to_insert = []
-                current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
                 if last_record:
                     # ── 在线状态变化（上线 / 下线） ────────────────
                     if new_record.is_online and not last_record.is_online:
                         logs_to_insert.append(PlayerEventLog(
                             event_category="ONLINE",
-                            message=f"[{current_time_str}] {PLAYER_NAME}上线了！服务器: {new_record.server or '未知'}",
+                            message=f"{PLAYER_NAME}上线了！服务器: {new_record.server or '未知'}",
                         ))
                     elif not new_record.is_online and last_record.is_online:
                         logs_to_insert.append(PlayerEventLog(
                             event_category="OFFLINE",
-                            message=f"[{current_time_str}] {PLAYER_NAME}从 {last_record.server or '未知'} 下线了",
+                            message=f"{PLAYER_NAME}从 {last_record.server or '未知'} 下线了",
                         ))
                     # ── 切服 ──────────────────────────────────────
                     elif (new_record.is_online and last_record.is_online
@@ -72,7 +76,7 @@ async def fetch_and_store_player_data():
                           and new_record.server != last_record.server):
                         logs_to_insert.append(PlayerEventLog(
                             event_category="SERVER_SWITCH",
-                            message=f"[{current_time_str}] {PLAYER_NAME}从 {last_record.server} 转场到了 {new_record.server}",
+                            message=f"{PLAYER_NAME}从 {last_record.server} 转场到了 {new_record.server}",
                         ))
 
                     for raid_name, new_count in new_record.raids_data.items():
@@ -80,24 +84,24 @@ async def fetch_and_store_player_data():
                         if new_count > old_count:
                             logs_to_insert.append(PlayerEventLog(
                                 event_category="RAID",
-                                message=f"[{current_time_str}] 成功通关了 {new_count - old_count} 次 {raid_name}",
+                                message=f"成功通关了 {new_count - old_count} 次 {raid_name}",
                             ))
                     for raid_name, new_count in new_record.guild_raids_data.items():
                         old_count = last_record.guild_raids_data.get(raid_name, 0)
                         if new_count > old_count:
                             logs_to_insert.append(PlayerEventLog(
                                 event_category="GUILD_RAID",
-                                message=f"[{current_time_str}] 公会通关了 {new_count - old_count} 次 {raid_name}",
+                                message=f"成功通关了 {new_count - old_count} 次 g {raid_name}",
                             ))
-                    if new_record.ranking_data != last_record.ranking_data:
-                        logs_to_insert.append(PlayerEventLog(
-                            event_category="RANKING",
-                            message=f"[{current_time_str}] 排行榜数据已更新。",
-                        ))
+                    # if new_record.ranking_data != last_record.ranking_data:
+                    #     logs_to_insert.append(PlayerEventLog(
+                    #         event_category="RANKING",
+                    #         message="排行榜数据已更新。",
+                    #     ))
                     if new_record.total_level > last_record.total_level:
                         logs_to_insert.append(PlayerEventLog(
                             event_category="LEVEL_UP",
-                            message=f"[{current_time_str}] 总等级提升了 {new_record.total_level - last_record.total_level} 级！",
+                            message=f"总等级提升了 {new_record.total_level - last_record.total_level} 级！",
                         ))
 
                 session.add(new_record)
