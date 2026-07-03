@@ -1,5 +1,7 @@
 <script setup>
+import { ref } from "vue"
 import { PLAYER_IGN, PLAYER_NAME } from "../config/constants"
+import { CONFESSIONS } from "../config/confessions"
 
 defineProps({
   latestStats: { type: Object, default: null },
@@ -9,6 +11,30 @@ defineProps({
 })
 
 defineEmits(["refresh"])
+
+const copyLabel = ref("表白卡死鱼")
+
+async function handleConfession() {
+  const confession = CONFESSIONS[Math.floor(Math.random() * CONFESSIONS.length)]
+  const text = `/msg kasyu_pwq ${confession}`
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    // Fallback for HTTP / older browsers
+    const ta = document.createElement("textarea")
+    ta.value = text
+    ta.style.position = "fixed"
+    ta.style.opacity = "0"
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand("copy")
+    document.body.removeChild(ta)
+  }
+  copyLabel.value = "✅ 已复制！"
+  setTimeout(() => {
+    copyLabel.value = "表白卡死鱼"
+  }, 1500)
+}
 </script>
 
 <template>
@@ -62,6 +88,12 @@ defineEmits(["refresh"])
           LIVE 实时
         </span>
       </span>
+      <button
+        @click="handleConfession"
+        class="px-5 py-2.5 bg-pink-600 hover:bg-pink-500 rounded-lg text-sm font-semibold transition cursor-pointer shadow-lg shadow-pink-600/20"
+      >
+        ❤️ {{ copyLabel }}
+      </button>
       <button
         @click="$emit('refresh')"
         class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-sm font-semibold transition cursor-pointer shadow-lg shadow-indigo-600/20"
